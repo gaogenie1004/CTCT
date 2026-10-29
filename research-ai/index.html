@@ -16,9 +16,51 @@ fetch("https://hn.algolia.com/api/v1/search?query="+encodeURIComponent(q)+"&hits
 fetch("https://www.federalregister.gov/api/v1/documents.json?conditions[term]="+encodeURIComponent(q)+"&per_page=12&order=newest").then(r=>{if(!r.ok)throw Error("Federal Register HTTP "+r.status);return r.json()}).then(d=>(d.results||[]).map(w=>({kind:"Government",title:w.title||"",year:w.publication_date||"",source:"미국 연방관보 Federal Register",authors:(w.agencies||[]).map(a=>a.name).slice(0,2).join(", "),url:safeUrl(w.html_url||""),abstract:(w.abstract||"").slice(0,1100)}))).catch(e=>{errors.push("정부: "+e.message);return []}),
 fetch("https://www.wikidata.org/w/api.php?action=wbsearchentities&search="+encodeURIComponent(q)+"&language=ko&uselang=ko&type=item&limit=12&format=json&origin=*").then(r=>{if(!r.ok)throw Error("Wikidata HTTP "+r.status);return r.json()}).then(d=>(d.search||[]).map(w=>({kind:"Company/Entity",title:w.label||"",year:"",source:"Wikidata 공개 기업·기관·단체 정보 (기업 여부 미검증)",authors:"",url:safeUrl(w.concepturi||""),abstract:w.description||"설명 없음"}))).catch(e=>{errors.push("기업/기관: "+e.message);return []}),
 fetch("https://api.gdeltproject.org/api/v2/doc/doc?query="+encodeURIComponent(q)+"&mode=artlist&maxrecords=20&format=json&sort=datedesc").then(async r=>{if(!r.ok)throw Error("GDELT HTTP "+r.status);return r.json()}).then(d=>(d.articles||[]).map(w=>({kind:"News",title:w.title||"",year:w.seendate||"",source:"GDELT / "+(w.domain||"언론사 미상"),authors:"",url:safeUrl(w.url||""),abstract:"뉴스 제목·URL 메타데이터만 수집됨. 기사 내용은 원문에서 확인 필요."}))).catch(e=>{errors.push("뉴스: "+e.message+" (브라우저 CORS/호출 제한 가능)");return []})
-];jobs.push(...webJobs);const rows=(await Promise.all(jobs)).flat();const seen=new Set();papers=rows.filter(p=>{const k=(p.url||p.title).toLowerCase();if(!p.title||seen.has(k))return false;seen.add(k);return true});display();$("draft").disabled=!papers.length;$("review").disabled=!papers.length;$("ai").disabled=!papers.length;if(papers.length){$("report").value=makeDraft();$("aiStatus").textContent="학술·정부·기업·뉴스·웹 자료를 통합한 전체 리포트 초안 생성 완료. 아래에서 수정하거나 TXT로 저장하세요.";const academic=papers.filter(p=>["OpenAlex","Crossref"].includes(p.kind)).length;const web=papers.length-academic;$("reviewResult").textContent="자료 구성: 학술 "+academic+"건 · 정부/기업/뉴스/웹 "+web+"건. 원문 사실검증과 AI 전문 집필은 별도 필요합니다."}else{$("report").value="";$("aiStatus").textContent="검색 결과가 없어 리포트를 만들지 못했습니다."}$("status").textContent=papers.length+"건 검색 완료 · 통합 리포트 "+(papers.length?"자동 생성":"생성 불가")+(errors.length?" · 일부 API 오류: "+errors.join(", "):"");$("run").disabled=false}
+];jobs.push(...webJobs);const rows=(await Promise.all(jobs)).flat();const seen=new Set();papers=rows.filter(p=>{const k=(p.url||p.title).toLowerCase();if(!p.title||seen.has(k))return false;seen.add(k);return true});display();$("draft").disabled=!papers.length;$("review").disabled=!papers.length;$("ai").disabled=!papers.length;if(papers.length){$("report").value=makeDraft();$("aiStatus").textContent="학술·정부·기업·뉴스·웹 자료를 통합한 전문형 통합 리포트 초안 생성 완료. 아래에서 수정하거나 TXT로 저장하세요.";const academic=papers.filter(p=>["OpenAlex","Crossref"].includes(p.kind)).length;const web=papers.length-academic;$("reviewResult").textContent="자료 구성: 학술 "+academic+"건 · 정부/기업/뉴스/웹 "+web+"건. 원문 사실검증과 AI 전문 집필은 별도 필요합니다."}else{$("report").value="";$("aiStatus").textContent="검색 결과가 없어 리포트를 만들지 못했습니다."}$("status").textContent=papers.length+"건 검색 완료 · 통합 리포트 "+(papers.length?"자동 생성":"생성 불가")+(errors.length?" · 일부 API 오류: "+errors.join(", "):"");$("run").disabled=false}
 $("run").onclick=search;$("web").onclick=()=>{const q=$("q").value.trim();if(q)window.open("https://www.google.com/search?q="+encodeURIComponent(q),"_blank","noopener");else $("status").textContent="검색어를 입력하세요."};
-function makeDraft(){const q=$("q").value.trim(),question=$("question").value.trim();const scholarly=papers.filter(p=>["OpenAlex","Crossref"].includes(p.kind)),web=papers.filter(p=>!["OpenAlex","Crossref"].includes(p.kind));const sections=["GAO Research AI — 학술·웹 통합 연구 리포트 (자료 기반 초안)","작성일: "+new Date().toLocaleDateString("ko-KR"),"주제: "+q,"연구 질문: "+(question||"미입력"),"","1. 연구 목적",question||q+"에 관한 공개 자료의 주요 논점을 검토한다.","","2. 자료 수집 방법","OpenAlex, Crossref, Wikipedia, Hacker News, 미국 Federal Register, Wikidata, GDELT 공개 검색 결과를 수집하였다. 이 자료는 원문 전체를 검증한 것이 아니며 검색 API의 제한을 받는다.","학술 검색 결과: "+scholarly.length+"건 / 정부·기업·뉴스·웹 검색 결과: "+web.length+"건","","3. 학술·웹 통합 자료 검토",...papers.slice(0,30).flatMap((p,i)=>["["+(i+1)+"] "+p.title,"자료 유형: "+p.kind+" / "+(p.source||"출처 미상"),"검색 제공 내용: "+(p.abstract||"요약 제공되지 않음"),"URL: "+(p.url||"없음"),""]),"4. 통합 분석 및 잠정적 시사점","위 자료는 서로 다른 유형과 신뢰도를 가진다. 학술 근거와 웹 게시물의 주장을 동일한 수준으로 취급해서는 안 된다.","현재 자동 초안은 수집된 자료의 정리이며, 독립적으로 검증된 연구 결론이 아니다.","","5. 연구 한계","원문 접근 여부, 출처의 최신성, 표본 편향, 검색 누락, 인과관계 및 인용 정확성의 추가 검증이 필요하다.","","6. 참고자료",...papers.map((p,i)=>"["+(i+1)+"] "+p.title+" | "+p.url),"","주의: 이 문서는 자동 편집 초안이며 학술적 검증이나 교수 심사를 통과한 완성 논문이 아니다."];return sections.join("\n")}
+function makeDraft(){
+const q=$("q").value.trim(),question=$("question").value.trim(),date=new Date().toLocaleDateString("ko-KR");
+const groups=[["학술 연구",["OpenAlex","Crossref"]],["정부·규제",["Government"]],["기업·기관",["Company/Entity"]],["언론·뉴스",["News"]],["기타 공개 웹",["Wikipedia","Web/HN"]]];
+const classified=groups.map(([name,kinds])=>({name,items:papers.map((p,i)=>({...p,id:i+1})).filter(p=>kinds.includes(p.kind))}));
+const evidence=p=>{const t=(p.abstract||"").replace(/\s+/g," ").trim();return t&&t.length>20&&!/기사 내용은 원문|내용과 사실 여부는 원문/.test(t)?t.slice(0,500):"검색 메타데이터만 확인됨. 원문 검증 필요."};
+const refs=classified.flatMap(g=>g.items);
+const lines=[
+"GAO RESEARCH AI | 통합 리서치 보고서","자료 기반 분석 초안 · 전문가 검증 전","작성일: "+date,"연구 주제: "+q,"핵심 연구 질문: "+(question||"미입력"),"검색자료: "+papers.length+"건","",
+"━━━━━━━━━━━━━━━━━━━━━━━━━━","EXECUTIVE SUMMARY | 경영진 요약","━━━━━━━━━━━━━━━━━━━━━━━━━━",
+"본 보고서는 '"+q+"'에 관한 학술·정부·기업·언론·공개 웹 검색 결과를 통합 검토하기 위한 자료 기반 초안이다.",
+"자료 구성: "+classified.map(g=>g.name+" "+g.items.length+"건").join(" / ")+".",
+"핵심 관찰: "+(refs.find(p=>evidence(p)!=="검색 메타데이터만 확인됨. 원문 검증 필요.")?.title||"검증 가능한 요약 자료가 부족하여 핵심 관찰 확정 불가")+".",
+"판단 유보: 검색 결과만으로 시장 규모·인과관계·정책 효과·기업 성과를 확정할 수 없다. 원문과 최신 수치 검증이 필요하다.","",
+"1. 연구 목적과 범위",
+"연구 질문: "+(question||q),
+"분석 범위: 학술 문헌, 정부·규제 문서, 기업·기관 정보, 뉴스 및 공개 웹 자료. 검색 API가 제공하는 제목·요약·메타데이터를 활용하며 유료 자료와 비공개 정보는 포함하지 않는다.","",
+"2. 조사 방법 및 자료 신뢰도",
+"검색 방법: OpenAlex, Crossref, Federal Register, Wikidata, GDELT, Wikipedia, Hacker News 병렬 검색. 검색 실패 또는 CORS 제한으로 일부 출처가 누락될 수 있다.",
+"검증 원칙: 1차 정부 자료 및 학술 원문을 우선하고, 기업·언론 자료는 발표 주체와 이해관계를 고려한다. 위키·커뮤니티 자료는 참고용으로 취급한다.",
+"중복 제거: URL 또는 제목 기준 1차 중복 제거. 동일 사실의 다중 출처 교차검증은 별도 필요.","",
+"3. 출처별 주요 발견 및 근거",
+...classified.flatMap((g,gi)=>["3."+(gi+1)+" "+g.name+" ("+g.items.length+"건)",...(g.items.length?g.items.slice(0,12).flatMap(p=>["["+p.id+"] "+p.title+" ("+(p.year||"발행일 미확인")+")","출처: "+(p.source||"미상"),"확인 가능한 요약: "+evidence(p),"링크: "+(p.url||"없음"),""]):["검색된 자료 없음 또는 API 접근 실패.",""])]),
+"4. 교차 분석 및 해석",
+"4.1 근거 수준: 정부 문서와 학술자료는 원문 확인 후 핵심 근거로 활용할 수 있다. 뉴스·기업 정보는 사실관계와 이해상충 여부를 검증해야 한다.",
+"4.2 공통 주제: 아래는 검색된 자료의 제목·요약을 토대로 분류한 항목이며, 상호 독립적인 사실 확인 결과는 아니다.",
+...classified.filter(g=>g.items.length).map(g=>"- "+g.name+": "+g.items.slice(0,3).map(p=>"["+p.id+"] "+p.title).join(" / ")),
+"4.3 상충 근거: 자료별 주장이 일치하거나 충돌하는지는 원문 수준의 비교가 필요하다. 본 버전은 확인되지 않은 합의를 주장하지 않는다.","",
+"5. 시나리오 및 실무적 시사점",
+"긍정 시나리오: 학술적 근거와 정책·기업 발표가 서로 일치하고 후속 검증이 뒷받침되는 경우 해당 가설의 신뢰도가 높아질 수 있다.",
+"기준 시나리오: 자료별 범위와 시점이 달라 결론을 유보하고 추가 자료 수집을 진행한다.",
+"부정 시나리오: 원문 검증 결과 주요 주장에 오류·표본 편향·이해상충이 발견되면 해당 근거를 제외하고 분석을 재작성한다.",
+"실행 제언: ① 상위 출처의 원문 확인 ② 핵심 수치·시점 교차검증 ③ 이해관계자별 반론 조사 ④ 검증된 자료만으로 최종 결론 작성.","",
+"6. 결론",
+"현재 확보된 "+papers.length+"건의 검색 자료를 출처별로 분류하고 검토 과제를 정리했다. 이 결과는 의사결정을 위한 초기 조사 자료이며, 전문 분석가의 사실 검증을 거친 최종 결론은 아니다.","",
+"7. 한계와 추가 조사",
+"- 검색 API의 범위·언어·호출 제한에 따라 결과가 누락될 수 있다.",
+"- 검색 제목과 짧은 요약만으로는 논문·기사의 전체 주장을 검증할 수 없다.",
+"- 기업 자료는 공식 공시가 아닐 수 있고, Wikidata 항목에는 비기업 개체도 포함될 수 있다.",
+"- 출처 간 상충, 통계적 유의성, 최신성 및 인용의 정확성을 추가 확인해야 한다.","",
+"8. 참고문헌 및 원문 링크",
+...refs.map(p=>"["+p.id+"] "+p.title+" | "+(p.year||"연도 미상")+" | "+p.kind+" | "+(p.url||"URL 없음")),
+"","[주의] 이 보고서는 검색 메타데이터 기반의 구조화된 초안이다. 독립적 AI 심층 추론·전문가 심사·원문 검증을 완료했다고 주장하지 않는다."
+];return lines.join("\n")}
 $("draft").onclick=()=>{$("report").value=makeDraft();$("aiStatus").textContent="검색 자료 기반 초안을 작성했습니다. 주장과 인용은 반드시 원문 검증이 필요합니다."};
 $("review").onclick=()=>{const t=$("report").value||makeDraft();if(!$("report").value)$("report").value=t;const doi=papers.filter(p=>/doi.org/.test(p.url)).length;const check=[["근거 검토",papers.length>=5?"참고자료 "+papers.length+"건 확보":"참고자료 부족", "DOI 링크 "+doi+"건; 원문 내용과 주장 일치 여부는 미검증"],["논리 검토",t.includes("연구 한계")?"연구 한계 항목 존재":"연구 한계 항목 보완 필요","인과관계·반론·방법론은 사람이 확인해야 함"],["인용 검토",papers.some(p=>p.url)?"출처 URL 포함":"출처 URL 없음","본문의 개별 주장과 인용의 정확성은 미검증"]];$("reviewResult").textContent="규칙 기반 3관점 점검 (교수 AI 아님): "+check.map(x=>x.join(" — ")).join(" / ")};
 $("ai").onclick=async()=>{const status=$("aiStatus");status.textContent="브라우저 내장 AI 지원 여부 확인 중…";const LM=window.LanguageModel||window.ai?.languageModel;if(!LM){status.textContent="이 Safari 환경은 웹페이지에서 사용할 수 있는 내장 AI 작성 API를 제공하지 않습니다. 무료 자료 기반 초안을 사용하세요.";return}try{const model=await(LM.create?LM.create():LM.createSession());const prompt="다음 공개 검색 결과만 근거로 한국어 연구보고서 초안을 작성하라. 근거 없는 내용은 생성하지 말고 검증되지 않은 정보는 명시하라. 연구 질문: "+$("question").value+"\n"+papers.slice(0,12).map((p,i)=>"["+(i+1)+"] "+p.title+" "+p.abstract+" "+p.url).join("\n").slice(0,18000);const output=await model.prompt(prompt);$("report").value=String(output);status.textContent="브라우저 내장 AI 초안 생성 완료. 사실 및 인용 검증은 별도로 필요합니다."}catch(e){status.textContent="내장 AI 실행 실패: "+e.message}};
